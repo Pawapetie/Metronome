@@ -7,6 +7,7 @@ import * as model from './song.js';
 import * as store from './presets.js';
 import * as audioStore from './audiostore.js';
 import { Track } from './track.js';
+import { createTapView } from './tap-ui.js';
 
 const COLORS = ['#ff9f1c', '#5b9dff', '#3ecf8e', '#c77dff', '#ff6b8b', '#2ec4d6'];
 const color = (i) => COLORS[i % COLORS.length];
@@ -423,6 +424,7 @@ export function createSongView(ctx) {
     $('recLoaded').hidden = !has;
     $('recName').textContent = has ? song.audio.name : '';
     if (has) $('offsetOut').textContent = fmtTime(song.audio.offset);
+    $('tapMapBtn').disabled = !track;
     drawWave();
   }
 
@@ -530,6 +532,23 @@ export function createSongView(ctx) {
     save();
   }));
 
+  // ---------- Tap mode ----------
+  const tapView = createTapView({
+    getSong: () => song,
+    getTrack: () => track,
+    getAudioContext: ctx.getAudioContext,
+    onApply(draft) {
+      song.sections = draft.sections.map((s) => model.sanitizeSection(s));
+      song.audio.offset = Math.round(draft.offset * 1000) / 1000;
+      song.end = 'stop';
+      openId = null;
+      structural();
+      renderRecording();
+      recStatus('Draft applied. Press Play song to check it against the recording.');
+    },
+  });
+  $('tapMapBtn').addEventListener('click', () => { stopIfPlaying(); tapView.open(); });
+
   // ---------- Now playing ----------
   const now = $('nowPlaying');
   const nowBeats = $('nowBeats');
@@ -629,6 +648,7 @@ export function createSongView(ctx) {
       root.setAttribute('aria-hidden', 'true');
       background().forEach((n) => { n.inert = false; });
       document.body.classList.remove('song-open');
+      tapView.close();
       disposeTrack(); // free the decoded audio while the view is closed
     },
     // Called when playback starts; returns the engine's first bar (count-in included).

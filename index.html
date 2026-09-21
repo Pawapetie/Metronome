@@ -145,6 +145,7 @@
         <div id="recLoaded" hidden>
           <canvas id="wave" class="wave" aria-label="Waveform. Tap to play from that bar."></canvas>
           <p class="hint">Tap the waveform to play from that bar.</p>
+          <button id="tapMapBtn" type="button" class="wide tapmap-btn">Tap tempo map</button>
           <div class="field">
             <span class="field-label">Bar 1 starts at <output id="offsetOut">0:00.00</output></span>
             <div class="nudge">
@@ -189,6 +190,50 @@
         <div class="field"><span class="field-label">At the end</span><div class="chips" id="endChips"></div></div>
         <p class="hint" id="endHint"></p>
       </section>
+    </div>
+  </div>
+
+  <!-- Tap mode: tap along with the recording to draft sections -->
+  <div id="tapView" class="tap-view" role="dialog" aria-modal="true" aria-labelledby="tapTitle" hidden>
+    <header class="song-top">
+      <button id="tapBack" class="ghost back" type="button">&larr; Done</button>
+      <h1 id="tapTitle">Tap tempo map</h1>
+    </header>
+    <div class="song-body">
+      <div id="tapStep1" class="tap-step">
+        <canvas id="tapWave" class="wave tap-wave" aria-label="Recording. Tap to jump to that point."></canvas>
+        <div class="tap-transport">
+          <button id="tapRewind" type="button" aria-label="Back to start">&#9198;</button>
+          <button id="tapPlay" type="button" class="round" aria-label="Play">&#9654;</button>
+          <span id="tapTime" class="tap-time">0:00.00 / 0:00.00</span>
+        </div>
+        <p class="hint" id="tapHint"></p>
+        <div class="tap-stats">
+          <span>Tempo<b id="tapBpm">–</b></span>
+          <span>Taps<b id="tapCount">0</b></span>
+          <span>Sections<b id="tapSecs">0</b></span>
+        </div>
+        <button id="tapSection" type="button" class="tap-section">New section &#9656;</button>
+        <button id="tapPad" type="button" class="tap-pad">TAP</button>
+        <div class="tap-actions">
+          <button id="tapUndo" type="button">Undo</button>
+          <button id="tapClear" type="button" class="danger">Clear</button>
+          <button id="tapReview" type="button" class="primary">Review draft</button>
+        </div>
+        <p class="hint">Keyboard: J = tap, S = new section, Space = play/pause.</p>
+      </div>
+      <div id="tapStep2" class="tap-step" hidden>
+        <p class="draft-error" id="draftError"></p>
+        <section class="card">
+          <div class="field"><span class="field-label">Round tempo to</span><div class="chips" id="roundChips"></div></div>
+          <p class="draft-offset" id="draftOffset"></p>
+        </section>
+        <div id="draftRows" class="draft-rows"></div>
+        <div class="tap-actions">
+          <button id="draftBack" type="button">&larr; Keep tapping</button>
+          <button id="draftApply" type="button" class="primary">Apply to song</button>
+        </div>
+      </div>
     </div>
   </div>
 
