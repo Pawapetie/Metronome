@@ -58,3 +58,10 @@ export function loadTrackVolume() {
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8;
 }
 export const saveTrackVolume = (v) => write(KEY_TRACK_VOL, v);
+
+const KEY_SONG_CLICK_VOL = 'metronome.songClickVolume';
+export function loadSongClickVolume() {
+  const v = Number(read(KEY_SONG_CLICK_VOL, 0.8));
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8;
+}
+export const saveSongClickVolume = (v) => write(KEY_SONG_CLICK_VOL, v);

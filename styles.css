@@ -381,7 +381,28 @@ button:disabled:active { transform: none; }
 .field-label output { color: var(--text); font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
 .nudge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .nudge button { padding: 0 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.tapmap-btn { margin-top: 10px; background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.rec-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rec-actions button { font-weight: 600; }
+.tapmap-btn { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.rec .volume + .volume { margin-top: 4px; }
+
+/* Export dialog */
+.export-view {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgb(0 0 0 / 0.55);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.export-view[hidden] { display: none; }
+.export-sheet { width: 100%; max-width: 528px; display: flex; flex-direction: column; gap: 12px; }
+.export-sheet h2 { margin: 0; font-size: 15px; color: var(--text); }
+.export-sheet .field[hidden] { display: none; }
+.export-sheet .hint { margin: 0; }
+.ex-summary { margin: 0; white-space: pre-line; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ex-progress { height: 8px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+.ex-progress[hidden] { display: none; }
+.ex-progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+@media (min-width: 600px) { .export-view { align-items: center; } }
 
 /* Tap mode */
 .tap-view {

@@ -335,6 +335,7 @@ function renderPlay() {
 // from (song view only): { section: index } or { bar: songBar } to start at.
 async function startPlayback(from = {}) {
   if (engine.playing) stopPlayback();
+  engine.setVolume(songView.isOpen ? (songView.clickVolume() ?? state.volume) : state.volume);
   if (songView.isOpen) {
     const startTime = await engine.start({ startBar: songView.beginPlay(from) });
     songView.afterStart(startTime);
@@ -352,6 +353,7 @@ function stopPlayback() {
   litBeat = null;
   $('barCount').textContent = '';
   songView.onStop();
+  engine.setVolume(state.volume); // previews on the main screen use the main volume
   renderPlay();
 }
 
@@ -369,6 +371,7 @@ songView = createSongView({
   },
   getKit: () => state.kit,
   getAudioContext: () => { engine.ensureContext(); return engine.ctx; },
+  setClickVolume: (v) => { if (engine.playing && songView.isOpen) engine.setVolume(v); },
   play: (from) => startPlayback(from),
   stop: stopPlayback,
   isPlaying: () => engine.playing,

@@ -14,12 +14,61 @@ export const ACCENT = 2;
 export const NORMAL = 1;
 export const MUTE = 0;
 
+// Which sound a tick plays ('accent' | 'normal' | 'sub') or null when muted.
+// Shared with the MP3 export so exported clicks match playback exactly.
+// Dotted pulse: BPM counts dotted quarters in compound meters (6/8 at 80 =
+// two felt beats per bar at 80); eighths inside each group play softer.
+export function tickLevel(s, beat, subIdx) {
+  const accent = s.accents[beat] ?? NORMAL;
+  if (accent === MUTE) return null;
+  if (subIdx > 0) return 'sub';
+  if (accent === ACCENT) return 'accent';
+  const dotted = s.pulse === 'dotted' && isCompound(s.beats, s.denom);
+  return dotted && beat % 3 !== 0 ? 'sub' : 'normal';
+}
+
+// Seconds from one tick to the next.
+export function tickSeconds(s) {
+  const dotted = s.pulse === 'dotted' && isCompound(s.beats, s.denom);
+  return 60 / s.bpm / (dotted ? 3 : 1) / s.sub;
+}
+
 const WORKER_SRC = `
 let id = null;
 onmessage = (e) => {
   clearInterval(id); id = null;
   if (e.data === 'start') id = setInterval(() => postMessage(0), ${LOOKAHEAD_MS});
 };`;
+
+// Zero-latency soft clipper: linear below 0.9, smoothly limited to < 1.0 above.
+// (A DynamicsCompressor would add ~6 ms of look-ahead delay, putting the click
+// behind the recording.) Handles input up to +-2. Returns the input node.
+let clipCurve = null;
+export function softClipper(ctx, dest) {
+  if (!clipCurve) {
+    const n = 4096;
+    clipCurve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const y = (i / (n - 1)) * 4 - 2; // shaper input -1..1 carries signal -2..2
+      const a = Math.abs(y);
+      clipCurve[i] = Math.sign(y) * (a <= 0.9 ? a : 0.9 + 0.1 * Math.tanh((a - 0.9) / 0.1));
+    }
+  }
+  const pre = ctx.createGain();
+  pre.gain.value = 0.5;
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = clipCurve;
+  pre.connect(shaper);
+  shaper.connect(dest);
+  return pre;
+}
+
+// Click output: gain -> soft clipper -> dest. Returns the gain node.
+export function clickChain(ctx, dest) {
+  const gain = ctx.createGain();
+  gain.connect(softClipper(ctx, dest));
+  return gain;
+}
 
 export class Engine {
   // getState(bar) -> { bpm, beats, denom, pulse, sub, accents: number[], kit } for that
@@ -47,11 +96,7 @@ export class Engine {
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC({ latencyHint: 'interactive' });
-    const comp = this.ctx.createDynamicsCompressor();
-    comp.threshold.value = -6;
-    comp.connect(this.ctx.destination);
-    this.master = this.ctx.createGain();
-    this.master.connect(comp);
+    this.master = clickChain(this.ctx, this.ctx.destination);
     this.setVolume(this.volume);
   }
 
@@ -114,20 +159,11 @@ export class Engine {
       if (this.beat >= s.beats) { this.beat = 0; this.bar++; }
       if (this.bar !== bar) continue;
 
-      // Dotted pulse: BPM counts dotted quarters in compound meters (6/8 at 80 =
-      // two felt beats per bar at 80); eighths inside each group play softer.
-      const dotted = s.pulse === 'dotted' && isCompound(s.beats, s.denom);
-      const accent = s.accents[this.beat] ?? NORMAL;
-      if (accent !== MUTE) {
-        let level = 'normal';
-        if (this.subIdx > 0) level = 'sub';
-        else if (accent === ACCENT) level = 'accent';
-        else if (dotted && this.beat % 3 !== 0) level = 'sub';
-        playSound(ctx, this.master, s.kit, level, this.nextTime);
-      }
+      const level = tickLevel(s, this.beat, this.subIdx);
+      if (level) playSound(ctx, this.master, s.kit, level, this.nextTime);
       this.queue.push({ time: this.nextTime, beat: this.beat, sub: this.subIdx, bar: this.bar });
 
-      this.nextTime += 60 / s.bpm / (dotted ? 3 : 1) / s.sub;
+      this.nextTime += tickSeconds(s);
       this.subIdx++;
       if (this.subIdx >= s.sub) { this.subIdx = 0; this.advanceBeat(s); }
     }

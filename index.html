@@ -145,7 +145,10 @@
         <div id="recLoaded" hidden>
           <canvas id="wave" class="wave" aria-label="Waveform. Tap to play from that bar."></canvas>
           <p class="hint">Tap the waveform to play from that bar.</p>
-          <button id="tapMapBtn" type="button" class="wide tapmap-btn">Tap tempo map</button>
+          <div class="rec-actions">
+            <button id="tapMapBtn" type="button" class="tapmap-btn">Tap tempo map</button>
+            <button id="exportBtn" type="button">Export MP3</button>
+          </div>
           <div class="field">
             <span class="field-label">Bar 1 starts at <output id="offsetOut">0:00.00</output></span>
             <div class="nudge">
@@ -155,6 +158,7 @@
               <button type="button" data-nudge="0.1" aria-label="Later by 100 milliseconds">+0.1s</button>
             </div>
           </div>
+          <label class="volume"><span>Click volume</span><input type="range" id="songClickVol" min="0" max="1" step="0.01" value="0.8"></label>
           <label class="volume"><span>Track volume</span><input type="range" id="trackVol" min="0" max="1" step="0.01" value="0.8"></label>
           <div class="song-manage">
             <label class="file-btn"><input type="file" id="recReplace" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg">Replace</label>
@@ -233,6 +237,26 @@
           <button id="draftBack" type="button">&larr; Keep tapping</button>
           <button id="draftApply" type="button" class="primary">Apply to song</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export MP3 -->
+  <div id="exportView" class="export-view" role="dialog" aria-modal="true" aria-labelledby="exportTitle" hidden>
+    <div class="card export-sheet">
+      <h2 id="exportTitle">Export MP3</h2>
+      <div class="field"><span class="field-label">What to export</span><div class="chips" id="exWhat"></div></div>
+      <div class="field" id="exMixField">
+        <span class="field-label">Mix</span>
+        <div class="chips" id="exMix"></div>
+        <p class="hint" id="exMixHint"></p>
+      </div>
+      <p class="ex-summary" id="exSummary"></p>
+      <div class="ex-progress" id="exProgress" hidden><div></div></div>
+      <p class="hint" id="exStatus" aria-live="polite"></p>
+      <div class="tap-actions">
+        <button id="exCancel" type="button">Cancel</button>
+        <button id="exGo" type="button" class="primary">Export</button>
       </div>
     </div>
   </div>

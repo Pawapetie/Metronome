@@ -16,6 +16,9 @@ A practical, phone-first metronome web app. Plain HTML/CSS/JS — no build step.
   sample-locked to the click, with a waveform showing the sections; tap it to play from any bar
 - **Tap tempo map**: tap along with the recording and mark section starts; taps are quantized into
   a draft (fitted, rounded tempos; bar-aligned sections; meter suggestions) you review and apply
+- **Export MP3** (songs with a recording): the song with the click mixed in (normal or stereo split:
+  click left, song right) or the click alone starting at bar 1. Uses the song screen's click/track
+  volumes and count-in; rendered offline with the same timing as playback
 - Compound meters can count BPM in dotted quarters or eighths
 - Dark mode (default), light mode, installable PWA, works offline, keeps screen awake
 
@@ -29,3 +32,6 @@ Then open http://localhost:8000 (or the port shown).
 
 ## Deploy
 Connect this repo to Netlify (publish directory `.`, no build command). Every push to `main` deploys.
+
+## Third-party
+`js/vendor/lame.min.js` is lamejs 1.2.1 (LGPL-3.0), used for MP3 encoding. See `js/vendor/README.md`.

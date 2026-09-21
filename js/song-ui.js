@@ -8,6 +8,7 @@ import * as store from './presets.js';
 import * as audioStore from './audiostore.js';
 import { Track } from './track.js';
 import { createTapView } from './tap-ui.js';
+import { createExportView } from './export-ui.js';
 
 const COLORS = ['#ff9f1c', '#5b9dff', '#3ecf8e', '#c77dff', '#ff6b8b', '#2ec4d6'];
 const color = (i) => COLORS[i % COLORS.length];
@@ -16,7 +17,7 @@ const sectionName = (s, i) => s.label.trim() || `Section ${i + 1}`;
 const meterText = (s) =>
   `${s.beats}/${s.denom} · ${s.bpm} BPM${s.pulse === 'dotted' && isCompound(s.beats, s.denom) ? ' (♩.)' : ''}`;
 
-// ctx: { getMainSettings(), getKit(), getAudioContext(), play({ section } | { bar }), stop(), isPlaying() }
+// ctx: { getMainSettings(), getKit(), getAudioContext(), setClickVolume(v), play({ section } | { bar }), stop(), isPlaying() }
 export function createSongView(ctx) {
   const $ = (id) => document.getElementById(id);
   const root = $('songView');
@@ -425,6 +426,7 @@ export function createSongView(ctx) {
     $('recName').textContent = has ? song.audio.name : '';
     if (has) $('offsetOut').textContent = fmtTime(song.audio.offset);
     $('tapMapBtn').disabled = !track;
+    $('exportBtn').disabled = !track;
     drawWave();
   }
 
@@ -501,6 +503,14 @@ export function createSongView(ctx) {
   });
   new ResizeObserver(() => drawWave()).observe(wave);
 
+  // Click volume for songs with a recording (sets the click/track balance).
+  const songClickVol = $('songClickVol');
+  songClickVol.value = store.loadSongClickVolume();
+  songClickVol.addEventListener('input', () => {
+    store.saveSongClickVolume(Number(songClickVol.value));
+    ctx.setClickVolume(Number(songClickVol.value));
+  });
+
   const trackVol = $('trackVol');
   trackVol.value = store.loadTrackVolume();
   trackVol.addEventListener('input', () => {
@@ -548,6 +558,17 @@ export function createSongView(ctx) {
     },
   });
   $('tapMapBtn').addEventListener('click', () => { stopIfPlaying(); tapView.open(); });
+
+  // ---------- Export ----------
+  const exportView = createExportView({
+    getSong: () => song,
+    getTrack: () => track,
+    getKit: ctx.getKit,
+    getClickVolume: () => Number(songClickVol.value),
+    getTrackVolume: () => Number(trackVol.value),
+    stop: stopIfPlaying,
+  });
+  $('exportBtn').addEventListener('click', () => exportView.open());
 
   // ---------- Now playing ----------
   const now = $('nowPlaying');
@@ -649,6 +670,7 @@ export function createSongView(ctx) {
       background().forEach((n) => { n.inert = false; });
       document.body.classList.remove('song-open');
       tapView.close();
+      exportView.close();
       disposeTrack(); // free the decoded audio while the view is closed
     },
     // Called when playback starts; returns the engine's first bar (count-in included).
@@ -672,6 +694,9 @@ export function createSongView(ctx) {
       playheadRaf = requestAnimationFrame(playheadLoop);
     },
     get track() { return track; },
+    // Click volume while playing a song: the song screen's slider when a
+    // recording is attached, otherwise null (use the main volume).
+    clickVolume() { return song.audio ? Number(songClickVol.value) : null; },
     stateFor(bar) {
       const s = model.stateForBar(song, bar, playStart);
       return s && { ...s, kit: ctx.getKit() };
