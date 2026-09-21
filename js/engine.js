@@ -38,6 +38,7 @@ export class Engine {
     this.raf = 0;
     this.ending = false;
     this.onEnd = null;
+    this.volume = 0.8;
   }
 
   ensureContext() {
@@ -51,10 +52,11 @@ export class Engine {
     comp.connect(this.ctx.destination);
     this.master = this.ctx.createGain();
     this.master.connect(comp);
-    this.setVolume(this.getState().volume);
+    this.setVolume(this.volume);
   }
 
   setVolume(v) {
+    this.volume = v;
     if (this.master) this.master.gain.value = v * v; // perceptual curve
   }
 

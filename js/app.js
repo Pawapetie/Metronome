@@ -7,6 +7,7 @@ import {
 } from './timesig.js';
 import { SUBS, PULSES, renderBeatButtons, holdRepeat, chipGroup } from './ui.js';
 import * as store from './presets.js';
+import { createSongView } from './song-ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,7 +42,13 @@ function persist() {
   saveTimer = setTimeout(() => store.saveState(state), 300);
 }
 
-const engine = new Engine(() => state, onTick);
+// One engine for both screens: it follows the song while the Songs view is open.
+let songView = null;
+const engine = new Engine(
+  (bar) => (songView?.isOpen ? songView.stateFor(bar) : state),
+  (beat, sub, bar) => (songView?.isOpen ? songView.onTick(beat, sub, bar) : onTick(beat, sub, bar)),
+);
+engine.setVolume(state.volume);
 
 // ---------- BPM ----------
 const bpmInput = $('bpm');
@@ -320,26 +327,64 @@ function releaseWakeLock() {
   wakeLock = null;
 }
 
-async function togglePlay() {
-  if (engine.playing) {
-    engine.stop();
-    releaseWakeLock();
-    litBeat?.classList.remove('on');
-    litBeat = null;
-    $('barCount').textContent = '';
-  } else {
-    await engine.start();
-    requestWakeLock();
-  }
+function renderPlay() {
   $('play').setAttribute('aria-pressed', String(engine.playing));
-  $('playLabel').textContent = engine.playing ? 'Stop' : 'Start';
+  $('playLabel').textContent = engine.playing ? 'Stop' : songView.isOpen ? 'Play song' : 'Start';
 }
+
+// fromSection: song view only, the section index to start at.
+async function startPlayback(fromSection = 0) {
+  if (engine.playing) stopPlayback();
+  if (songView.isOpen) await engine.start({ startBar: songView.beginPlay(fromSection) });
+  else await engine.start();
+  requestWakeLock();
+  renderPlay();
+}
+
+function stopPlayback() {
+  engine.stop();
+  releaseWakeLock();
+  litBeat?.classList.remove('on');
+  litBeat = null;
+  $('barCount').textContent = '';
+  songView.onStop();
+  renderPlay();
+}
+
+// A song set to stop at the end finishes on its own.
+engine.onEnd = stopPlayback;
+
+const togglePlay = () => (engine.playing ? stopPlayback() : startPlayback());
 $('play').addEventListener('click', togglePlay);
+
+// ---------- Song view ----------
+songView = createSongView({
+  getMainSettings: () => {
+    const { bpm, beats, denom, pulse, accents, sub } = state;
+    return { bpm, beats, denom, pulse, accents: [...accents], sub };
+  },
+  getKit: () => state.kit,
+  play: (fromSection) => startPlayback(fromSection),
+  stop: stopPlayback,
+  isPlaying: () => engine.playing,
+});
+
+// Switching screens stops playback so it's always clear what is playing.
+function setSongView(open) {
+  if (open === songView.isOpen) return;
+  if (engine.playing) stopPlayback();
+  if (open) songView.open(); else songView.close();
+  renderPlay();
+  if (!open) $('songsBtn').focus({ preventScroll: true });
+}
+$('songsBtn').addEventListener('click', () => setSongView(true));
+$('songBack').addEventListener('click', () => setSongView(false));
 
 // Space always means start/stop (except while typing). Buttons and switches
 // activate on Space keyup, so suppress that too; Enter still activates them.
-const isTyping = (e) => e.target.matches('input[type="text"]');
+const isTyping = (e) => e.target.matches('input[type="text"], select');
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && songView.isOpen && !isTyping(e)) { setSongView(false); return; }
   if (e.code !== 'Space' || isTyping(e)) return;
   e.preventDefault();
   if (!e.repeat) togglePlay();

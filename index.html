@@ -25,7 +25,10 @@
 <body>
   <header class="topbar">
     <h1>Metronome</h1>
-    <button id="theme" class="ghost" type="button" aria-label="Theme">Dark</button>
+    <div class="topbar-actions">
+      <button id="songsBtn" class="songs-btn" type="button">♫ Songs</button>
+      <button id="theme" class="ghost" type="button" aria-label="Theme">Dark</button>
+    </div>
   </header>
 
   <main>
@@ -113,6 +116,54 @@
       <ul class="preset-list" id="presetList"></ul>
     </details>
   </main>
+
+  <!-- Song mode: full-screen panel -->
+  <div id="songView" class="song-view" role="dialog" aria-modal="true" aria-label="Songs" aria-hidden="true" inert>
+    <header class="song-top">
+      <button id="songBack" class="ghost back" type="button">&larr; Back</button>
+      <h1>Songs</h1>
+    </header>
+    <div class="song-body">
+      <section class="card">
+        <div class="song-pick">
+          <select id="songSelect" aria-label="Choose song"></select>
+          <button id="songNew" type="button">+ New</button>
+        </div>
+        <input id="songName" class="text-input" type="text" maxlength="40" autocomplete="off" aria-label="Song name" placeholder="Song name">
+        <div class="song-manage">
+          <button id="songDup" type="button">Duplicate song</button>
+          <button id="songDel" type="button" class="danger">Delete song</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Timeline</h2>
+        <div class="timeline" id="timeline"></div>
+        <p class="hint" id="songTotal"></p>
+      </section>
+
+      <section class="card now" id="nowPlaying" hidden aria-live="polite">
+        <div class="now-head">
+          <span class="swatch"></span>
+          <span class="now-title" id="nowTitle"></span>
+          <span class="now-meter" id="nowMeter"></span>
+        </div>
+        <div class="now-bar" id="nowBar"></div>
+        <div class="now-sub"><span id="nowSongBar"></span><span id="nowNext"></span></div>
+        <div class="beats" id="nowBeats"></div>
+      </section>
+
+      <div class="section-list" id="sectionList"></div>
+      <button id="addSection" class="wide add-section" type="button">+ Add section</button>
+
+      <section class="card">
+        <h2>Options</h2>
+        <div class="field"><span class="field-label">Count-in</span><div class="chips" id="countInChips"></div></div>
+        <div class="field"><span class="field-label">At the end</span><div class="chips" id="endChips"></div></div>
+        <p class="hint" id="endHint"></p>
+      </section>
+    </div>
+  </div>
 
   <footer class="playbar">
     <button id="play" class="play" type="button" aria-pressed="false">
