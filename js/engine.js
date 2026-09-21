@@ -121,9 +121,10 @@ export class Engine {
     const ctx = this.ctx;
     // Flash when the click actually reaches the speaker, not when it is rendered.
     const now = ctx.currentTime - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
-    let last = null;
-    while (this.queue.length && this.queue[0].time <= now) last = this.queue.shift();
-    if (last) this.onTick(last.beat, last.sub, last.bar);
+    while (this.queue.length && this.queue[0].time <= now) {
+      const t = this.queue.shift();
+      this.onTick(t.beat, t.sub, t.bar);
+    }
     this.raf = requestAnimationFrame(() => this.drawLoop());
   }
 
