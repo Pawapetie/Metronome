@@ -43,3 +43,11 @@ export function deletePreset(name) {
   write(KEY_PRESETS, list);
   return list;
 }
+
+// Songs: { songs: Song[], currentId }. Validation happens in song.js.
+const KEY_SONGS = 'metronome.songs';
+export function loadSongs() {
+  const data = read(KEY_SONGS, null);
+  return data && Array.isArray(data.songs) ? data : { songs: [], currentId: null };
+}
+export const saveSongs = (data) => write(KEY_SONGS, data);
