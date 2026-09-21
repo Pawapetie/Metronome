@@ -1,9 +1,10 @@
 // Offline support. Bump VERSION whenever app files change so clients refresh.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `metronome-${VERSION}`;
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/engine.js', 'js/sounds.js', 'js/wheel.js', 'js/timesig.js', 'js/presets.js',
+  'js/ui.js', 'js/song.js', 'js/song-ui.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
 ];
 

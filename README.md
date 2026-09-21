@@ -9,6 +9,10 @@ A practical, phone-first metronome web app. Plain HTML/CSS/JS — no build step.
 - Subdivisions (8ths, triplets, 16ths, quintuplets, sextuplets)
 - Synthesized sound kits, volume control
 - Saved presets, remembers last settings
+- **Song mode** (♫ Songs): build a song from sections with their own bars, tempo, meter and accents
+  (e.g. 8 bars 4/4 → 8 bars 6/8 → 4/4 until stopped). Count-in, loop or stop at the end,
+  start from any section, and a live "now playing / next change" panel
+- Compound meters can count BPM in dotted quarters or eighths
 - Dark mode (default), light mode, installable PWA, works offline, keeps screen awake
 
 ## Run locally
