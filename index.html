@@ -136,6 +136,33 @@
         </div>
       </section>
 
+      <section class="card rec" id="recCard">
+        <div class="card-head"><h2>Recording</h2><span class="rec-name" id="recName"></span></div>
+        <div id="recEmpty">
+          <p class="hint rec-intro">Add an MP3 of the song to play along with the click and tap out its tempo map. The file stays on this device.</p>
+          <label class="file-btn wide"><input type="file" id="recFile" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg">Add recording</label>
+        </div>
+        <div id="recLoaded" hidden>
+          <canvas id="wave" class="wave" aria-label="Waveform. Tap to play from that bar."></canvas>
+          <p class="hint">Tap the waveform to play from that bar.</p>
+          <div class="field">
+            <span class="field-label">Bar 1 starts at <output id="offsetOut">0:00.00</output></span>
+            <div class="nudge">
+              <button type="button" data-nudge="-0.1" aria-label="Earlier by 100 milliseconds">&minus;0.1s</button>
+              <button type="button" data-nudge="-0.01" aria-label="Earlier by 10 milliseconds">&minus;10ms</button>
+              <button type="button" data-nudge="0.01" aria-label="Later by 10 milliseconds">+10ms</button>
+              <button type="button" data-nudge="0.1" aria-label="Later by 100 milliseconds">+0.1s</button>
+            </div>
+          </div>
+          <label class="volume"><span>Track volume</span><input type="range" id="trackVol" min="0" max="1" step="0.01" value="0.8"></label>
+          <div class="song-manage">
+            <label class="file-btn"><input type="file" id="recReplace" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg">Replace</label>
+            <button id="recRemove" type="button" class="danger">Remove</button>
+          </div>
+        </div>
+        <p class="hint" id="recStatus" aria-live="polite"></p>
+      </section>
+
       <section class="card">
         <h2>Timeline</h2>
         <div class="timeline" id="timeline"></div>

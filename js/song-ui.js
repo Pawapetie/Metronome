@@ -5,6 +5,8 @@ import { COMMON, clampBpm, clampBeats, stepDenom, defaultAccents, isCompound, be
 import { SUBS, PULSES, renderBeatButtons, holdRepeat, chipGroup, el } from './ui.js';
 import * as model from './song.js';
 import * as store from './presets.js';
+import * as audioStore from './audiostore.js';
+import { Track } from './track.js';
 
 const COLORS = ['#ff9f1c', '#5b9dff', '#3ecf8e', '#c77dff', '#ff6b8b', '#2ec4d6'];
 const color = (i) => COLORS[i % COLORS.length];
@@ -13,7 +15,7 @@ const sectionName = (s, i) => s.label.trim() || `Section ${i + 1}`;
 const meterText = (s) =>
   `${s.beats}/${s.denom} · ${s.bpm} BPM${s.pulse === 'dotted' && isCompound(s.beats, s.denom) ? ' (♩.)' : ''}`;
 
-// ctx: { getMainSettings(), getKit(), play(fromIndex), stop(), isPlaying() }
+// ctx: { getMainSettings(), getKit(), getAudioContext(), play({ section } | { bar }), stop(), isPlaying() }
 export function createSongView(ctx) {
   const $ = (id) => document.getElementById(id);
   const root = $('songView');
@@ -62,6 +64,7 @@ export function createSongView(ctx) {
     openId = null;
     renderAll();
     save();
+    loadTrack();
   });
   nameInput.addEventListener('input', () => {
     song.name = nameInput.value.slice(0, 40);
@@ -82,12 +85,14 @@ export function createSongView(ctx) {
     openId = s.sections[0].id;
     renderAll();
     save();
+    loadTrack();
     nameInput.focus();
     nameInput.select();
   });
   $('songDup').addEventListener('click', () => {
     stopIfPlaying();
     const copy = model.sanitizeSong({ ...structuredClone(song), id: undefined, name: `${song.name} (copy)` });
+    if (copy.audio) audioStore.copyAudio(song.id, copy.id);
     songs.push(copy);
     song = copy;
     openId = null;
@@ -97,12 +102,14 @@ export function createSongView(ctx) {
   $('songDel').addEventListener('click', () => {
     if (!confirm(`Delete song "${song.name}"?`)) return;
     stopIfPlaying();
+    audioStore.deleteAudio(song.id);
     songs = songs.filter((s) => s !== song);
     if (!songs.length) songs = [model.newSong('Song 1', ctx.getMainSettings())];
     song = songs[0];
     openId = null;
     renderAll();
     save();
+    loadTrack();
   });
 
   // ---------- Timeline ----------
@@ -134,6 +141,7 @@ export function createSongView(ctx) {
     cards.forEach((c) => c.refreshHead());
     renderTimeline();
     renderOptions();
+    drawWave();
     save();
   }
 
@@ -149,6 +157,7 @@ export function createSongView(ctx) {
     renderTimeline();
     renderSections();
     renderOptions();
+    drawWave();
     save();
   }
 
@@ -253,7 +262,7 @@ export function createSongView(ctx) {
       structural();
     };
     const actions = el('div', { class: 'sec-actions' },
-      el('button', { type: 'button', class: 'primary', onclick: () => ctx.play(i) }, '▶ Start here'),
+      el('button', { type: 'button', class: 'primary', onclick: () => ctx.play({ section: i }) }, '▶ Start here'),
       el('button', {
         type: 'button', onclick: () => {
           const copy = model.newSection(sec);
@@ -336,9 +345,190 @@ export function createSongView(ctx) {
     renderCountIn(song.countIn);
     renderEnd(song.end);
     const endless = model.isEndless(song);
-    for (const c of $('endChips').children) c.disabled = endless;
-    $('endHint').textContent = endless ? 'The last section repeats until you press Stop.' : '';
+    for (const c of $('endChips').children) c.disabled = endless || !!song.audio;
+    if (song.audio) renderEnd('stop');
+    $('endHint').textContent = song.audio
+      ? 'Loop is off while a recording is attached. Playback stops when the recording ends.'
+      : endless ? 'The last section repeats until you press Stop.' : '';
   }
+
+  // ---------- Recording ----------
+  let track = null;       // decoded Track for the current song, or null
+  let loadToken = 0;      // guards against a slow decode finishing after a song switch
+  let playheadRaf = 0;
+  const wave = $('wave');
+  const recStatus = (msg) => { $('recStatus').textContent = msg || ''; };
+
+  const fmtTime = (sec) => {
+    const m = Math.floor(sec / 60);
+    return `${m}:${(sec - m * 60).toFixed(2).padStart(5, '0')}`;
+  };
+
+  function disposeTrack() {
+    loadToken++;
+    cancelAnimationFrame(playheadRaf);
+    track?.dispose();
+    track = null;
+  }
+
+  // Decode the current song's recording from IndexedDB.
+  async function loadTrack() {
+    disposeTrack();
+    renderRecording();
+    if (!song.audio || !isOpen) return;
+    const token = loadToken;
+    recStatus('Loading recording…');
+    const blob = await audioStore.getAudio(song.id);
+    if (token !== loadToken) return;
+    if (!blob) { recStatus('The recording file is missing on this device. Add it again.'); return; }
+    try {
+      const t = await Track.decode(ctx.getAudioContext(), blob);
+      if (token !== loadToken) { t.dispose(); return; }
+      track = t;
+      track.setVolume(Number(trackVol.value));
+      recStatus('');
+    } catch {
+      if (token === loadToken) recStatus('Could not decode the saved recording. Try adding it again.');
+    }
+    renderRecording();
+  }
+
+  async function addRecording(file) {
+    if (!file) return;
+    stopIfPlaying();
+    const target = song;
+    recStatus('Reading file…');
+    let t;
+    try {
+      t = await Track.decode(ctx.getAudioContext(), file);
+    } catch {
+      recStatus("Couldn't read this file. Try an MP3, M4A or WAV.");
+      return;
+    }
+    if (target !== song) { t.dispose(); return; }
+    disposeTrack();
+    track = t;
+    track.setVolume(Number(trackVol.value));
+    const stored = await audioStore.putAudio(song.id, file);
+    song.audio = { name: file.name, duration: track.duration, offset: song.audio?.offset ?? 0 };
+    recStatus(stored ? '' : "Couldn't save the recording on this device; it works until you close the app.");
+    renderRecording();
+    renderOptions();
+    save();
+  }
+
+  function renderRecording() {
+    const has = !!song.audio;
+    $('recEmpty').hidden = has;
+    $('recLoaded').hidden = !has;
+    $('recName').textContent = has ? song.audio.name : '';
+    if (has) $('offsetOut').textContent = fmtTime(song.audio.offset);
+    drawWave();
+  }
+
+  function sectionTimes() {
+    const starts = model.startBars(song);
+    return song.sections.map((s, i) => {
+      const t0 = song.audio.offset + model.timeAtBar(song, starts[i]);
+      const t1 = s.bars === null ? Infinity : song.audio.offset + model.timeAtBar(song, starts[i] + s.bars);
+      return [t0, t1];
+    });
+  }
+
+  function drawWave() {
+    if (!song.audio || !isOpen) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = wave.clientWidth, h = wave.clientHeight;
+    if (!w) return;
+    if (wave.width !== Math.round(w * dpr)) { wave.width = Math.round(w * dpr); wave.height = Math.round(h * dpr); }
+    const g = wave.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const dur = track?.duration || song.audio.duration || 1;
+    const X = (t) => (t / dur) * w;
+    const css = getComputedStyle(document.documentElement);
+
+    // Section bands and bar lines
+    sectionTimes().forEach(([t0, t1], i) => {
+      const x0 = X(t0), x1 = Math.min(w, X(Math.min(t1, dur)));
+      if (x1 <= x0) return;
+      g.fillStyle = color(i) + '38';
+      g.fillRect(x0, 0, x1 - x0, h);
+      g.fillStyle = color(i);
+      g.fillRect(x0, 0, 2, h);
+      const barPx = X(model.barSeconds(song.sections[i]));
+      if (barPx >= 4) {
+        g.fillStyle = color(i) + '88';
+        for (let x = x0 + barPx; x < x1 - 1; x += barPx) g.fillRect(x, h - 8, 1, 8);
+      }
+    });
+
+    // Waveform
+    g.fillStyle = css.getPropertyValue('--muted').trim();
+    if (track) {
+      const cols = Math.floor(w);
+      const peaks = track.peaks(cols);
+      for (let x = 0; x < cols; x++) {
+        const a = Math.max(1, peaks[x] * (h / 2 - 4));
+        g.fillRect(x, h / 2 - a, 1, a * 2);
+      }
+      if (track.playing) {
+        g.fillStyle = css.getPropertyValue('--text').trim();
+        g.fillRect(X(track.position()) - 1, 0, 2, h);
+      }
+    } else {
+      g.fillRect(0, h / 2, w, 1);
+    }
+  }
+
+  function playheadLoop() {
+    drawWave();
+    if (track?.playing) playheadRaf = requestAnimationFrame(playheadLoop);
+  }
+
+  // Tap the waveform: play from the start of the bar at that point.
+  wave.addEventListener('click', (e) => {
+    if (!song.audio) return;
+    const rect = wave.getBoundingClientRect();
+    const dur = track?.duration || song.audio.duration;
+    const t = ((e.clientX - rect.left) / rect.width) * dur - song.audio.offset;
+    let bar = model.barAtTime(song, t);
+    const total = model.totalBars(song);
+    if (Number.isFinite(total)) bar = Math.min(bar, total);
+    ctx.play({ bar });
+  });
+  new ResizeObserver(() => drawWave()).observe(wave);
+
+  const trackVol = $('trackVol');
+  trackVol.value = store.loadTrackVolume();
+  trackVol.addEventListener('input', () => {
+    track?.setVolume(Number(trackVol.value));
+    store.saveTrackVolume(Number(trackVol.value));
+  });
+
+  $('recFile').addEventListener('change', (e) => { addRecording(e.target.files[0]); e.target.value = ''; });
+  $('recReplace').addEventListener('change', (e) => { addRecording(e.target.files[0]); e.target.value = ''; });
+  $('recRemove').addEventListener('click', () => {
+    if (!confirm('Remove the recording from this song? The sections are kept.')) return;
+    stopIfPlaying();
+    audioStore.deleteAudio(song.id);
+    disposeTrack();
+    song.audio = null;
+    recStatus('');
+    renderRecording();
+    renderOptions();
+    save();
+  });
+
+  // Nudge where bar 1 sits in the recording.
+  root.querySelectorAll('[data-nudge]').forEach((b) => holdRepeat(b, () => {
+    if (!song.audio) return;
+    const dur = track?.duration || song.audio.duration;
+    const next = Math.round((song.audio.offset + Number(b.dataset.nudge)) * 1000) / 1000;
+    song.audio.offset = Math.min(dur, Math.max(0, next));
+    renderRecording();
+    save();
+  }));
 
   // ---------- Now playing ----------
   const now = $('nowPlaying');
@@ -405,7 +595,7 @@ export function createSongView(ctx) {
     const when = inBars === 1 ? 'next bar' : `in ${inBars} bars`;
     const next = song.sections[info.index + 1];
     if (next) return `Next: ${meterText(next)}, ${when}`;
-    return song.end === 'loop' ? `Back to the start ${when}` : `Ends ${when}`;
+    return model.loops(song) ? `Back to the start ${when}` : `Ends ${when}`;
   }
 
   // ---------- Public ----------
@@ -414,6 +604,7 @@ export function createSongView(ctx) {
     renderTimeline();
     renderSections();
     renderOptions();
+    renderRecording();
   }
   renderAll();
 
@@ -428,6 +619,7 @@ export function createSongView(ctx) {
       background().forEach((n) => { n.inert = true; });
       document.body.classList.add('song-open');
       renderAll();
+      loadTrack();
       $('songBack').focus({ preventScroll: true });
     },
     close() {
@@ -437,20 +629,38 @@ export function createSongView(ctx) {
       root.setAttribute('aria-hidden', 'true');
       background().forEach((n) => { n.inert = false; });
       document.body.classList.remove('song-open');
+      disposeTrack(); // free the decoded audio while the view is closed
     },
     // Called when playback starts; returns the engine's first bar (count-in included).
-    beginPlay(fromIndex = 0) {
-      playStart = model.startBars(song)[fromIndex] ?? 1;
+    // from: { section: index } or { bar: songBar }.
+    beginPlay(from = {}) {
+      playStart = from.bar ?? model.startBars(song)[from.section ?? 0] ?? 1;
       curIndex = null;
       now.hidden = false;
       return playStart - song.countIn;
     },
+    // startTime: audio-clock time of the first click. Start the recording so the
+    // song's playStart bar lines up with it (the count-in plays over the lead-up).
+    afterStart(startTime) {
+      if (!track || !song.audio || startTime == null) return;
+      const first = (model.sectionAt(song, playStart) || model.sectionAt(song, 1)).section;
+      const pos = song.audio.offset + model.timeAtBar(song, playStart) - song.countIn * model.barSeconds(first);
+      if (pos >= track.duration) return;
+      track.onended = () => { if (ctx.isPlaying()) ctx.stop(); };
+      track.play(startTime + Math.max(0, -pos), Math.max(0, pos));
+      cancelAnimationFrame(playheadRaf);
+      playheadRaf = requestAnimationFrame(playheadLoop);
+    },
+    get track() { return track; },
     stateFor(bar) {
       const s = model.stateForBar(song, bar, playStart);
       return s && { ...s, kit: ctx.getKit() };
     },
     onTick,
     onStop() {
+      track?.stop();
+      cancelAnimationFrame(playheadRaf);
+      drawWave();
       now.hidden = true;
       lit = null;
       curIndex = null;

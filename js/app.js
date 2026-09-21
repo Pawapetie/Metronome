@@ -332,11 +332,15 @@ function renderPlay() {
   $('playLabel').textContent = engine.playing ? 'Stop' : songView.isOpen ? 'Play song' : 'Start';
 }
 
-// fromSection: song view only, the section index to start at.
-async function startPlayback(fromSection = 0) {
+// from (song view only): { section: index } or { bar: songBar } to start at.
+async function startPlayback(from = {}) {
   if (engine.playing) stopPlayback();
-  if (songView.isOpen) await engine.start({ startBar: songView.beginPlay(fromSection) });
-  else await engine.start();
+  if (songView.isOpen) {
+    const startTime = await engine.start({ startBar: songView.beginPlay(from) });
+    songView.afterStart(startTime);
+  } else {
+    await engine.start();
+  }
   requestWakeLock();
   renderPlay();
 }
@@ -364,7 +368,8 @@ songView = createSongView({
     return { bpm, beats, denom, pulse, accents: [...accents], sub };
   },
   getKit: () => state.kit,
-  play: (fromSection) => startPlayback(fromSection),
+  getAudioContext: () => { engine.ensureContext(); return engine.ctx; },
+  play: (from) => startPlayback(from),
   stop: stopPlayback,
   isPlaying: () => engine.playing,
 });

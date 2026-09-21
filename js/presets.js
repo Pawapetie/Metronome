@@ -51,3 +51,10 @@ export function loadSongs() {
   return data && Array.isArray(data.songs) ? data : { songs: [], currentId: null };
 }
 export const saveSongs = (data) => write(KEY_SONGS, data);
+
+const KEY_TRACK_VOL = 'metronome.trackVolume';
+export function loadTrackVolume() {
+  const v = Number(read(KEY_TRACK_VOL, 0.8));
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.8;
+}
+export const saveTrackVolume = (v) => write(KEY_TRACK_VOL, v);

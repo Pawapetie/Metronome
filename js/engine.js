@@ -67,7 +67,7 @@ export class Engine {
   }
 
   async start({ startBar = 1 } = {}) {
-    if (this.playing) return;
+    if (this.playing) return null;
     this.ensureContext();
     await this.resume();
     this.playing = true;
@@ -82,9 +82,11 @@ export class Engine {
       this.worker = new Worker(url);
       this.worker.onmessage = () => this.schedule();
     }
+    const startTime = this.nextTime;
     this.worker.postMessage('start');
     this.schedule();
     this.raf = requestAnimationFrame(() => this.drawLoop());
+    return startTime; // audio-clock time of the first tick
   }
 
   stop() {
