@@ -50,3 +50,11 @@ export function tempoName(bpm) {
 
 const NOTE_NAMES = { 1: 'whole', 2: 'half', 4: 'quarter', 8: 'eighth', 16: '16th', 32: '32nd' };
 export const noteName = (d) => NOTE_NAMES[d];
+
+// What one BPM "beat" is. With a dotted pulse in compound meters the felt beat
+// is a group of three bottom-number notes: 3 eighths = dotted quarter, etc.
+const DOTTED_NAMES = { 8: 'dotted quarter', 16: 'dotted eighth', 32: 'dotted 16th' };
+export function beatUnitLabel(beats, denom, pulse) {
+  if (pulse === 'dotted' && isCompound(beats, denom)) return `${DOTTED_NAMES[denom]} note`;
+  return `${noteName(denom)} note`;
+}

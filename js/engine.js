@@ -5,6 +5,7 @@
 // roughly on time; the audio hardware fires each click exactly.
 
 import { playSound } from './sounds.js';
+import { isCompound } from './timesig.js';
 
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.1;
@@ -21,8 +22,11 @@ onmessage = (e) => {
 };`;
 
 export class Engine {
-  // getState() -> { bpm, beats, sub, accents: number[], kit, volume }
+  // getState(bar) -> { bpm, beats, denom, pulse, sub, accents: number[], kit } for that
+  // bar, or null to end playback (song finished). Settings are fetched per tick,
+  // but song mode returns the same settings for a whole bar, so changes land on bar lines.
   // onTick(beatIndex, subIndex, bar) is called in sync with what is heard.
+  // onEnd() fires after the last scheduled click of a finished song has played.
   constructor(getState, onTick) {
     this.getState = getState;
     this.onTick = onTick;
@@ -32,6 +36,8 @@ export class Engine {
     this.queue = [];
     this.worker = null;
     this.raf = 0;
+    this.ending = false;
+    this.onEnd = null;
   }
 
   ensureContext() {
@@ -58,14 +64,15 @@ export class Engine {
     }
   }
 
-  async start() {
+  async start({ startBar = 1 } = {}) {
     if (this.playing) return;
     this.ensureContext();
     await this.resume();
     this.playing = true;
+    this.ending = false;
     this.beat = 0;
     this.subIdx = 0;
-    this.bar = 1;
+    this.bar = startBar;
     this.nextTime = this.ctx.currentTime + 0.06;
     this.queue = [];
     if (!this.worker) {
@@ -81,31 +88,42 @@ export class Engine {
   stop() {
     if (!this.playing) return;
     this.playing = false;
+    this.ending = false;
     this.worker?.postMessage('stop');
     cancelAnimationFrame(this.raf);
     this.queue = [];
   }
 
   schedule() {
-    if (!this.playing) return;
+    if (!this.playing || this.ending) return;
     const ctx = this.ctx;
     // After a suspension (phone call, backgrounding) don't burst out missed ticks.
     if (this.nextTime < ctx.currentTime - 0.05) this.nextTime = ctx.currentTime + 0.05;
 
     while (this.nextTime < ctx.currentTime + SCHEDULE_AHEAD) {
-      const s = this.getState();
-      // Settings may have shrunk since the last tick; wrap safely.
+      const s = this.getState(this.bar);
+      if (!s) { this.ending = true; break; }
+      // Settings may have shrunk since the last tick; wrap safely, and if that
+      // moved us into a new bar, fetch that bar's settings first.
+      const bar = this.bar;
       if (this.subIdx >= s.sub) { this.subIdx = 0; this.advanceBeat(s); }
       if (this.beat >= s.beats) { this.beat = 0; this.bar++; }
+      if (this.bar !== bar) continue;
 
+      // Dotted pulse: BPM counts dotted quarters in compound meters (6/8 at 80 =
+      // two felt beats per bar at 80); eighths inside each group play softer.
+      const dotted = s.pulse === 'dotted' && isCompound(s.beats, s.denom);
       const accent = s.accents[this.beat] ?? NORMAL;
       if (accent !== MUTE) {
-        const level = this.subIdx > 0 ? 'sub' : accent === ACCENT ? 'accent' : 'normal';
+        let level = 'normal';
+        if (this.subIdx > 0) level = 'sub';
+        else if (accent === ACCENT) level = 'accent';
+        else if (dotted && this.beat % 3 !== 0) level = 'sub';
         playSound(ctx, this.master, s.kit, level, this.nextTime);
       }
       this.queue.push({ time: this.nextTime, beat: this.beat, sub: this.subIdx, bar: this.bar });
 
-      this.nextTime += 60 / s.bpm / s.sub;
+      this.nextTime += 60 / s.bpm / (dotted ? 3 : 1) / s.sub;
       this.subIdx++;
       if (this.subIdx >= s.sub) { this.subIdx = 0; this.advanceBeat(s); }
     }
@@ -124,6 +142,11 @@ export class Engine {
     while (this.queue.length && this.queue[0].time <= now) {
       const t = this.queue.shift();
       this.onTick(t.beat, t.sub, t.bar);
+    }
+    if (this.ending && !this.queue.length) {
+      this.stop();
+      this.onEnd?.();
+      return;
     }
     this.raf = requestAnimationFrame(() => this.drawLoop());
   }

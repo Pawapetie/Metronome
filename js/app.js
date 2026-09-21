@@ -3,25 +3,17 @@ import { KITS } from './sounds.js';
 import { createWheel } from './wheel.js';
 import {
   MIN_BPM, MAX_BPM, COMMON, clampBpm, clampBeats, stepDenom,
-  defaultAccents, isCompound, tempoName, noteName,
+  defaultAccents, isCompound, tempoName, noteName, beatUnitLabel,
 } from './timesig.js';
+import { SUBS, PULSES, renderBeatButtons, holdRepeat, chipGroup } from './ui.js';
 import * as store from './presets.js';
 
 const $ = (id) => document.getElementById(id);
 
-const SUBS = [
-  { n: 1, label: '1', note: 'none' },
-  { n: 2, label: '2', note: '8ths' },
-  { n: 3, label: '3', note: 'triplets' },
-  { n: 4, label: '4', note: '16ths' },
-  { n: 5, label: '5', note: 'quint.' },
-  { n: 6, label: '6', note: 'sext.' },
-];
-
 // ---------- State ----------
 const DEFAULTS = {
   bpm: 120, beats: 4, denom: 4, accents: defaultAccents(4, 4),
-  sub: 1, kit: 'click', volume: 0.8,
+  sub: 1, kit: 'click', volume: 0.8, pulse: 'dotted',
 };
 
 function sanitize(s) {
@@ -30,6 +22,7 @@ function sanitize(s) {
   out.beats = clampBeats(Math.round(Number(out.beats)) || 4);
   out.denom = [1, 2, 4, 8, 16, 32].includes(out.denom) ? out.denom : 4;
   out.sub = SUBS.some((x) => x.n === out.sub) ? out.sub : 1;
+  out.pulse = out.pulse === 'note' ? 'note' : 'dotted';
   out.kit = KITS.some((k) => k.id === out.kit) ? out.kit : 'click';
   out.volume = Math.min(1, Math.max(0, Number(out.volume)));
   if (!Number.isFinite(out.volume)) out.volume = DEFAULTS.volume;
@@ -69,7 +62,7 @@ function setBpm(v, { fromWheel = false } = {}) {
 function renderBpm() {
   if (document.activeElement !== bpmInput) bpmInput.value = state.bpm;
   $('tempoName').textContent = tempoName(state.bpm);
-  $('bpmUnit').textContent = `BPM · ${noteName(state.denom)} note`;
+  $('bpmUnit').textContent = `BPM · ${beatUnitLabel(state.beats, state.denom, state.pulse)}`;
   wheelEl.setAttribute('aria-valuenow', state.bpm);
 }
 
@@ -100,25 +93,6 @@ bpmInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Press-and-hold repeat that speeds up the longer it is held.
-function holdRepeat(btn, fn) {
-  let timer = 0, start = 0;
-  const tick = () => {
-    const held = performance.now() - start;
-    fn(held > 2000 ? 5 : 1);
-    timer = setTimeout(tick, held > 1000 ? 50 : 110);
-  };
-  btn.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    start = performance.now();
-    fn(1);
-    timer = setTimeout(tick, 400);
-  });
-  const stop = () => clearTimeout(timer);
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, stop));
-  btn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fn(1); } });
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
-}
 holdRepeat($('bpmDown'), (n) => setBpm(state.bpm - n));
 holdRepeat($('bpmUp'), (n) => setBpm(state.bpm + n));
 
@@ -174,14 +148,24 @@ COMMON.forEach(([b, d]) => {
   tsChips.append(c);
 });
 
+const renderPulse = chipGroup($('pulseChips'), PULSES, (v) => {
+  state.pulse = v;
+  renderTimeSig();
+  renderBpm();
+  persist();
+});
+
 function renderTimeSig() {
+  const compound = isCompound(state.beats, state.denom);
+  $('pulseRow').hidden = !compound;
+  renderPulse(state.pulse);
   $('tsBeats').textContent = state.beats;
   $('tsDenom').textContent = state.denom;
   for (const c of tsChips.children) {
     c.setAttribute('aria-pressed', String(+c.dataset.b === state.beats && +c.dataset.d === state.denom));
   }
   let hint = `${state.beats} ${noteName(state.denom)} note${state.beats > 1 ? 's' : ''} per bar.`;
-  if (isCompound(state.beats, state.denom)) {
+  if (compound) {
     hint += ` Compound meter: felt in ${state.beats / 3} groups of 3.`;
   } else if (state.denom >= 8 && state.beats > 4) {
     hint += ' Odd meter: tap beats to set your grouping (e.g. 2+2+3).';
@@ -191,25 +175,12 @@ function renderTimeSig() {
 
 // ---------- Beats / accents ----------
 const beatsEl = $('beats');
-const NEXT_LEVEL = { [ACCENT]: NORMAL, [NORMAL]: MUTE, [MUTE]: ACCENT };
-const LEVEL_NAME = { [ACCENT]: 'accent', [NORMAL]: 'normal', [MUTE]: 'muted' };
-
 function renderBeats() {
-  beatsEl.replaceChildren(...state.accents.map((lvl, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'beat';
-    b.dataset.level = lvl;
-    b.textContent = i + 1;
-    b.setAttribute('aria-label', `Beat ${i + 1}: ${LEVEL_NAME[lvl]}`);
-    b.addEventListener('click', () => {
-      state.accents[i] = NEXT_LEVEL[state.accents[i]];
-      if (i === 0) $('stress').checked = state.accents[0] === ACCENT;
-      renderBeats();
-      persist();
-    });
-    return b;
-  }));
+  renderBeatButtons(beatsEl, state.accents, (i, level) => {
+    state.accents[i] = level;
+    renderBeats();
+    persist();
+  });
   $('stress').checked = state.accents[0] === ACCENT;
 }
 
@@ -229,19 +200,13 @@ function onTick(beat, sub, bar) {
 }
 
 // ---------- Subdivision ----------
-const subChips = $('subChips');
-SUBS.forEach(({ n, label, note }) => {
-  const c = document.createElement('button');
-  c.type = 'button';
-  c.className = 'chip sub';
-  c.dataset.n = n;
-  c.innerHTML = `${label}<small>${note}</small>`;
-  c.addEventListener('click', () => { state.sub = n; renderSubs(); persist(); });
-  subChips.append(c);
-});
-function renderSubs() {
-  for (const c of subChips.children) c.setAttribute('aria-pressed', String(+c.dataset.n === state.sub));
-}
+const renderSubChips = chipGroup(
+  $('subChips'),
+  SUBS.map(({ n, label, note }) => ({ value: n, html: `${label}<small>${note}</small>` })),
+  (n) => { state.sub = n; renderSubs(); persist(); },
+  'sub',
+);
+const renderSubs = () => renderSubChips(state.sub);
 
 // ---------- Sound ----------
 const kitChips = $('kitChips');
@@ -272,7 +237,8 @@ volumeEl.addEventListener('input', () => {
 
 // ---------- Presets ----------
 function presetSummary(p) {
-  return `${p.bpm} BPM · ${p.beats}/${p.denom}` +
+  const dotted = p.pulse === 'dotted' && isCompound(p.beats, p.denom);
+  return `${p.bpm} BPM${dotted ? ' (♩.)' : ''} · ${p.beats}/${p.denom}` +
     (p.sub > 1 ? ` · ÷${p.sub}` : '') +
     ` · ${KITS.find((k) => k.id === p.kit)?.name || ''}`;
 }
@@ -312,8 +278,8 @@ $('presetForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const name = $('presetName').value.trim();
   if (!name) return;
-  const { bpm, beats, denom, accents, sub, kit } = state;
-  renderPresets(store.savePreset(name, { bpm, beats, denom, accents: [...accents], sub, kit }));
+  const { bpm, beats, denom, pulse, accents, sub, kit } = state;
+  renderPresets(store.savePreset(name, { bpm, beats, denom, pulse, accents: [...accents], sub, kit }));
   $('presetName').value = '';
   $('presetName').blur();
 });
