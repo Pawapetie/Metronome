@@ -12,6 +12,10 @@ A practical, phone-first metronome web app. Plain HTML/CSS/JS — no build step.
 - **Song mode** (♫ Songs): build a song from sections with their own bars, tempo, meter and accents
   (e.g. 8 bars 4/4 → 8 bars 6/8 → 4/4 until stopped). Count-in, loop or stop at the end,
   start from any section, and a live "now playing / next change" panel
+- **Recordings in Song mode**: attach an MP3/M4A/WAV (stored only on your device) and it plays
+  sample-locked to the click, with a waveform showing the sections; tap it to play from any bar
+- **Tap tempo map**: tap along with the recording and mark section starts; taps are quantized into
+  a draft (fitted, rounded tempos; bar-aligned sections; meter suggestions) you review and apply
 - Compound meters can count BPM in dotted quarters or eighths
 - Dark mode (default), light mode, installable PWA, works offline, keeps screen awake
 
